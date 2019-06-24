@@ -1,15 +1,17 @@
 package xautoserver
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
 	"sync/atomic"
+	"time"
 	"unsafe"
 )
 
 const (
-	watchCertsTimeThreshold = 5	// secs
+	watchCertsTimeThreshold = 60	// secs
 )
 
 // https://wiki.mozilla.org/Security/Server_Side_TLS#Modern_compatibility
@@ -48,6 +50,8 @@ type manager struct {
 	// cache
 	ci		unsafe.Pointer	// *certInfo
 	logger	*log.Logger
+
+	stop	context.CancelFunc
 }
 
 // instead of logger, use callback for error handling
@@ -68,7 +72,9 @@ func newManager(c *TLSConfig, logger *log.Logger) (*manager, error) {
 		logger: logger,
 	}
 
-	m.atomSetCI(ci)
+	if err := m.init(ci); err != nil {
+		return nil, err
+	}
 
 	return m, nil
 }
@@ -96,22 +102,72 @@ func (m *manager) certs() (*tls.Certificate, error) {
 	// no need for lock, use atomic pointers
 	ci := m.atomGetCI()
 
-	// TODO configurable watchCertsTimeThreshold
-	if ci.shouldWatch(watchCertsTimeThreshold) {
+	return ci.tlscert(), nil
+}
 
-		nci, err := helperWatchCertsChanges(m.c, ci.mtime())
-		if err != nil {
-			// log and use old cached certs
-			m.logger.Printf("CRITICAL cert renew ERROR: %s!", err)
-		} else if nci != nil {	// renew only if ci is not nil
-			// for return below
-			ci = m.atomSetCI(nci)
+func (m *manager) updateCI() bool {
 
-			m.logger.Printf("success cert renewal with mtime %d", ci.mtime())
-		}
+	ci, err := helperWatchCertsChanges(
+		m.c, m.atomGetCI().mtime())
+
+	if err != nil {
+		// log and use old cached certs
+		m.logger.Printf("CRITICAL cert renew ERROR: %s!", err)
+		return false
 	}
 
-	return ci.tlscert(), nil
+	if ci != nil {	// renew only if ci is not nil
+		// for return below
+		m.atomSetCI(ci)
+
+		m.logger.Printf("success cert renewal with mtime %d", ci.mtime())
+	}
+
+	return true
+}
+
+// TODO configurable watchCertsTimeThreshold
+func (m *manager) watcher(ctx context.Context) {
+	delta := watchCertsTimeThreshold * time.Second
+	// once-fired timer with manual reset guaranteed that we execute no more than one updateCI in time
+	ticker := time.NewTimer(delta)
+L:
+	for {
+		select {
+
+		case <-ctx.Done():
+			if !ticker.Stop() {
+				<-ticker.C
+			}
+			break L
+
+		case <-ticker.C:
+			// TODO use true / false retval to select d for Reset(d)
+			m.updateCI()
+			ticker.Reset(delta)
+		}
+	}
+}
+
+func (m *manager) init(ci *certInfo) error {
+
+	// first must set ci
+	m.atomSetCI(ci)
+
+	{
+		ctx, stop := context.WithCancel(context.Background())
+
+		m.stop = stop
+
+		// start certs watcher
+		go m.watcher(ctx)
+	}
+
+	return nil
+}
+
+func (m *manager) Stop() {
+	m.stop()
 }
 
 func (m *manager) GetCertificate(chi *tls.ClientHelloInfo) (*tls.Certificate, error) {

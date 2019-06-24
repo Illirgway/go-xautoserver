@@ -56,7 +56,11 @@ func ListenAndServe(addr string, handler http.Handler, config *Config) error {
 		srv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0)
 		srv.TLSConfig = manager.TLSStrongConfig()
 
-		return srv.ListenAndServeTLS("", "")
+		err = srv.ListenAndServeTLS("", "")
+
+		manager.Stop()
+
+		return err
 	}
 
 	return srv.ListenAndServe()
