@@ -16,6 +16,9 @@ type Config struct {
 
 	// tls enabled if this is filled (not nil)
 	TLS					*TLSConfig
+
+	// cb fn that gets srv
+	SrvCb				func(*http.Server)
 }
 
 func (c *Config) IsTLS() bool {
@@ -42,6 +45,10 @@ func (c *Config) httpServer(addr string, handler http.Handler) *http.Server {
 			Addr: addr,
 			Handler: handler,
 		}
+	}
+
+	if c.SrvCb != nil {
+		c.SrvCb(srv)
 	}
 
 	return srv
