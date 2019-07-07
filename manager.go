@@ -14,7 +14,7 @@ const (
 	watchCertsTimeThreshold = 60	// secs
 )
 
-// https://wiki.mozilla.org/Security/Server_Side_TLS#Modern_compatibility
+// https://wiki.mozilla.org/index.php?title=Security/Server_Side_TLS&oldid=1212843#Modern_compatibility
 
 var (
 	tlsNextProtos = []string{
