@@ -7,9 +7,9 @@ Package for automatically reload TLS certificate of a running http server
 Additionally, use [modern cipher suites](https://wiki.mozilla.org/index.php?title=Security/Server_Side_TLS&oldid=1212843#Modern_compatibility)
 and TLS 1.2 as min TLS version
 
-#Usage
+# Usage
 
-###Simple as single package 
+### Simple as single package 
 
 ```gotemplate
 import "github.com/Illirgway/go-xautoserver"
@@ -50,7 +50,7 @@ func startServer(h http.Handler) error {
 
 ```
 
-###Complex usage with `go-xgracefulstop`
+### Complex usage with [`go-xgracefulstop`](https://github.com/Illirgway/go-xgracefulstop)
 
 ```gotemplate
 import ( 
